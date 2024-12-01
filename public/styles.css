@@ -72,12 +72,7 @@ button:hover{
   color: #dfdfdf;
 }
 
-.message strong{
-  display: flex;
-  justify-content: space-between;
-}
-
-.message strong span{
+.message span{
   font-size: 14px;
   font-weight: 400;
   color: #939393;
