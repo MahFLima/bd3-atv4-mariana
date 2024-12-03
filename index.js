@@ -17,63 +17,71 @@ app.use("/", (req, res) => {
   res.render("index.html");
 });
 
-// Conectando ao MongoDB (Criação ou uso do banco de dados)
-mongoose
-  .connect("mongodb+srv://marianalima:password@cluster0.qduzk.mongodb.net/chatDB", {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  })
-  .then(() => {
-    console.log("Conectado ao MongoDB");
-  })
-  .catch((err) => {
-    console.error("Erro ao conectar ao MongoDB:", err);
+function connectDB() {
+  /* URL de conexão com o Atlas mongoDB: */
+  let dbUrl =
+    "mongodb+srv://marianalima:<password>@cluster0.qduzk.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
+
+  mongoose.connect(dbUrl);
+  mongoose.connection.on(
+    "error",
+    console.error.bind(console, "connection error:")
+  );
+  mongoose.connection.once("open", function callback() {
+    console.log("Atlas mongoDB conectado!");
   });
+}
+
+connectDB();
+
+let messages = [];
 
 // Definir o esquema e modelo de mensagem
-const messageSchema = new mongoose.Schema({
+let Message = mongoose.model("Message", {
   user: String,
   message: String,
   timestamp: { type: Date, default: Date.now }
 });
 
-const Message = mongoose.model("Message", messageSchema);
-
-io.on("connection", (socket) => {
-  console.log("Novo usuário conectado! " + socket.id);
-
-  // Recuperar e enviar as mensagens do banco de dados
-  Message.find().then((messages) => {
-    socket.emit("previousMessage", messages);  // Envia as mensagens salvas para o frontend
+/*Recupera as mensagens do banco de dados: */
+Message.find({})
+  .then((docs) => {
+    console.log("DOCS: " + docs);
+    messages = docs;
+    console.log("MESSAGES: " + messages);
+  })
+  .catch((err) => {
+    console.log(err);
   });
 
-  // Disparar ações quando recebe as mensagens do frontend
-  socket.on("sendMessage", (data) => {
-    // Verifique se 'user' e 'message' estão sendo passados corretamente
-    console.log("Usuário:", data.user);
-    console.log("Mensagem:", data.message);
+/* Cria uma conexão com o socketIO que será usada pela aplicação de chat: */
+io.on('connection', socket=>{
+  /* Exibe a título de teste da conexão o id do socket do usuário conectado: */
+  console.log(`Novo usuário conectado ${socket.id}`);
 
-    // Criar um novo documento de mensagem
-    const newMessage = new Message({
-      user: data.user,
-      message: data.message,
-    });
+  /* Recupera e mantem as mensagens do front para back e vice-versa: */
+  socket.emit('previousMessage', messages);
 
-    // Salvar a mensagem no banco de dados
-    newMessage
-      .save()
-      .then(() => {
-        console.log("Mensagem salva no banco de dados!");
-        
-        // Emitir a mensagem para todos os outros usuários, mas não para o remetente
-        socket.broadcast.emit("newMessage", data);  // Emitir para todos, exceto o remetente
-      })
-      .catch((err) => {
-        console.error("Erro ao salvar a mensagem:", err);
+  /* Dispara ações quando recebe mensagens do frontend: */
+  socket.on('sendMessage', data => {
+
+  /* Adicona uma mensagem enviada no final do array de mensagens: */
+  // messages.push(data);
+  let message = new Message(data);
+  message.save()
+      .then(
+          socket.broadcast.emit('receivedMessage', data)
+      )
+      .catch(err=>{
+          console.log('ERRO: ' + err);
       });
-  });
-});
 
-server.listen(3000, () => {
-  console.log("listening on port 3000");
+  /* Propaga a mensagem enviada para todos os usuário conectados na aplicaçao de chat: */
+  // socket.broadcast.emit('receivedMessage', data);
+
+  });
+})
+
+server.listen(3001, () => {
+  console.log("listening on port 3001");
 });
